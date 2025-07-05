@@ -21,8 +21,9 @@ export class ReportsService {
     const tmpDir = 'tmp';
     const outputFile = 'out/accounts.csv';
     const accountBalances: Record<string, number> = {};
+    const output = ['Account,Balance'];
     fs.readdirSync(tmpDir).forEach((file) => {
-      if (file.endsWith('.csv')) {
+      if (file.endsWith('.csv') && file !== 'fs.csv') {
         const lines = fs
           .readFileSync(path.join(tmpDir, file), 'utf-8')
           .trim()
@@ -34,13 +35,10 @@ export class ReportsService {
           }
           accountBalances[account] +=
             parseFloat(String(debit || 0)) - parseFloat(String(credit || 0));
+            output.push(`${account},${accountBalances[account].toFixed(2)}`);
         }
       }
     });
-    const output = ['Account,Balance'];
-    for (const [account, balance] of Object.entries(accountBalances)) {
-      output.push(`${account},${balance.toFixed(2)}`);
-    }
     fs.writeFileSync(outputFile, output.join('\n'));
     this.states.accounts = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
