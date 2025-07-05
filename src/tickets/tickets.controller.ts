@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, Get, Post } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, Post } from '@nestjs/common';
 import { Company } from '../../db/models/Company';
 import {
   Ticket,
@@ -33,15 +33,39 @@ export class TicketsController {
   async create(@Body() newTicketDto: newTicketDto) {
     const { type, companyId } = newTicketDto;
 
-    const category =
-      type === TicketType.managementReport
-        ? TicketCategory.accounting
-        : TicketCategory.corporate;
+    if (typeof type === undefined || typeof companyId === undefined) {
+      throw new BadRequestException('Type and companyId are required');
+    }
 
-    let userRole =
-      type === TicketType.managementReport
-        ? UserRole.accountant
-        : UserRole.corporateSecretary;
+    function getCategoryFromType(ticketType: TicketType): TicketCategory {
+      switch (ticketType) {
+        case TicketType.managementReport:
+          return TicketCategory.accounting;
+        case TicketType.registrationAddressChange:
+          return TicketCategory.corporate;
+        case TicketType.strikeOff:
+          return TicketCategory.management;
+        default:
+          throw new BadRequestException(`Unknown ticket type: ${ticketType}`);
+      }
+    }
+
+    function getUserRoleFromType(ticketType: TicketType): UserRole {
+      switch (ticketType) {
+        case TicketType.managementReport:
+          return UserRole.accountant;
+        case TicketType.registrationAddressChange:
+          return UserRole.corporateSecretary;
+        case TicketType.strikeOff:
+          return UserRole.director;
+        default:
+          throw new BadRequestException(`Unknown ticket type: ${ticketType}`);
+      }
+    }
+
+    const category = getCategoryFromType(type);
+
+    let userRole = getUserRoleFromType(type);
 
     let assignees = await User.findAll({
       where: { companyId, role: userRole },
@@ -58,7 +82,7 @@ export class TicketsController {
     });
 
     // CHALLENGE 1: if company has registrationAddressChange ticket, cannot create another one
-    if (racTicket) {
+    if (racTicket && type === TicketType.registrationAddressChange) {
       throw new ConflictException(
         `Cannot create a ticket with multiple type of ${TicketType.registrationAddressChange} for company ${companyId}`,
       );
@@ -78,6 +102,7 @@ export class TicketsController {
       );
     }
 
+    // CHALLENGE 2: if multiple users with director role, cannot create a ticket
     if ((userRole === UserRole.corporateSecretary 
       || userRole === UserRole.director) && assignees.length > 1) {
       throw new ConflictException(
@@ -86,6 +111,20 @@ export class TicketsController {
     }
 
     const assignee = assignees[0];
+
+
+    if (type === TicketType.strikeOff) {
+      // CHALLENGE 2: resolve all tickets if ticket type is strikeOff
+      await Ticket.update(
+        { status: TicketStatus.resolved },
+        {
+          where: {
+            companyId,
+            status: TicketStatus.open,
+          },
+        },
+      );
+    }
 
     const ticket = await Ticket.create({
       companyId,
