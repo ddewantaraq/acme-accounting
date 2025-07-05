@@ -15,31 +15,48 @@ export class ReportsService {
     return this.states[scope];
   }
 
-  accounts() {
+  async accounts() {
     this.states.accounts = 'starting';
     const start = performance.now();
     const tmpDir = 'tmp';
     const outputFile = 'out/accounts.csv';
     const accountBalances: Record<string, number> = {};
     const output = ['Account,Balance'];
-    fs.readdirSync(tmpDir).forEach((file) => {
+    const allFiles: string[] = await fs.promises.readdir(tmpDir);
+    const writeStream = fs.createWriteStream(outputFile, { flags: 'a' });
+    if (allFiles.length === 0) {
+      this.states.accounts = 'no files found';
+      return;
+    }
+    for (const file of allFiles) {
       if (file.endsWith('.csv') && file !== 'fs.csv') {
-        const lines = fs
-          .readFileSync(path.join(tmpDir, file), 'utf-8')
-          .trim()
-          .split('\n');
-        for (const line of lines) {
-          const [, account, , debit, credit] = line.split(',');
-          if (!accountBalances[account]) {
-            accountBalances[account] = 0;
-          }
-          accountBalances[account] +=
-            parseFloat(String(debit || 0)) - parseFloat(String(credit || 0));
+        const filePath = path.join(tmpDir, file);
+        const readStream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+        readStream.on('data', (data) => {
+          const lines = data.toString().trim().split('\n');
+          for (const line of lines) {
+            const [, account, , debit, credit] = line.split(',');
+            if (!accountBalances[account]) {
+              accountBalances[account] = 0;
+            }
+            accountBalances[account] +=
+              parseFloat(String(debit || 0)) - parseFloat(String(credit || 0));
             output.push(`${account},${accountBalances[account].toFixed(2)}`);
-        }
+          }
+        })
+        .on('end', () => {
+          writeStream.write(output.join('\n'));
+          writeStream.end();
+          readStream.close();
+        })
+        .on('error', (err) => {
+          console.error(`Error reading file ${file}:`, err);
+        });
       }
+    }
+    writeStream.on('finish', () => {
+      writeStream.close();
     });
-    fs.writeFileSync(outputFile, output.join('\n'));
     this.states.accounts = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 
