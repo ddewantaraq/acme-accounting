@@ -1,4 +1,4 @@
-import { Controller, Get, Post, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, HttpCode, InternalServerErrorException } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { performance } from 'perf_hooks';
 import { reportDto } from './dto';
@@ -19,11 +19,16 @@ export class ReportsController {
   @Post()
   @HttpCode(201)
   async generate() {
-    const start = performance.now();
-    const allDatas: reportDto = await this.reportsService.extractDatas();
-    await this.reportsService.accounts(allDatas.accountBalances);
-    await this.reportsService.yearly(allDatas.cashByYear);
-    await this.reportsService.fs(allDatas.balances);
-    return { message: 'finished', duration: ((performance.now() - start) / 1000).toFixed(2) };
+    try {
+      const start = performance.now();
+      const allDatas: reportDto = await this.reportsService.extractDatas();
+      await this.reportsService.accounts(allDatas.accountBalances);
+      await this.reportsService.yearly(allDatas.cashByYear);
+      await this.reportsService.fs(allDatas.balances);
+      return { message: 'finished', duration: ((performance.now() - start) / 1000).toFixed(2) };
+    } catch (error) {
+      console.error('Error generating reports:', error);
+      throw new InternalServerErrorException('Failed to generate reports');
+    }
   }
 }

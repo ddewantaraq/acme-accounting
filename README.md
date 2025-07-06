@@ -152,7 +152,7 @@ docker-compose up -d
 
 3. Run migrations
 ```sh
-npm run migrate
+npm run db:migrate
 ```
 
 4. Start the server

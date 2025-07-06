@@ -43,6 +43,11 @@ module.exports = {
   },
 
   async down (queryInterface, Sequelize) {
-    return queryInterface.bulkDelete('users', null, {});
+    return queryInterface.sequelize.transaction(t => {
+      return Promise.all([
+        queryInterface.bulkDelete('tickets', null, { transaction: t }),
+        queryInterface.bulkDelete('users', null, { transaction: t })
+      ]);
+    });
   }
 };
